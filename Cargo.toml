@@ -4,12 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cortex-m = { version = "0.7.7" }
-cortex-m-rt = "0.7.5"
-panic-halt = "1.0.0"
 ra4m1 = { version = "0.2.1", git = "https://github.com/ra-rs/ra", features = [
-    "cortex-m-rt",
+    "rt",
+    "critical-section",
 ] }
+cortex-m-rt = { version = "0.7.5" }
+panic-halt = "1.0.0"
+cortex-m = { version = "0.7.7" }
 
 [[bin]]
 name = "uno-r4-rust"

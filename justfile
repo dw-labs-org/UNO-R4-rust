@@ -11,3 +11,6 @@ flash_usb: build
 
 flash_bl:
     rfp-cli -device ra -port /dev/ttyACM0 -p dfu_minima.hex
+
+show_asm:
+    cargo asm --bin uno-r4-rust 1 --rust --intel > app.asm

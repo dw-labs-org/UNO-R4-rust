@@ -1,7 +1,7 @@
 MEMORY
 {
   /* NOTE 1 K = 1 KiBi = 1024 bytes */  
-  FLASH : ORIGIN = 0x00000000, LENGTH = 256K
+  FLASH : ORIGIN = 0x00004000, LENGTH = 256K
   RAM : ORIGIN = 0x20000000, LENGTH = 32K
 }
 
@@ -16,7 +16,7 @@ MEMORY
    section */
 /* This is required only on microcontrollers that store some configuration right
    after the vector table */
-_stext = ORIGIN(FLASH) + 0x4000;
+/* _stext = ORIGIN(FLASH) + 0x4000;
 
 /* Example of putting non-initialized variables into custom RAM locations. */
 /* This assumes you have defined a region RAM2 above, and in the Rust

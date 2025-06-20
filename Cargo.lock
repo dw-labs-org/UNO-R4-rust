@@ -81,6 +81,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a513e167849a384b7f9b746e517604398518590a9142f4846a32e3c2a4de7b11"
 
 [[package]]
+name = "portable-atomic"
+version = "1.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -96,6 +102,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "ra4m1"
+version = "0.2.1"
+source = "git+https://github.com/ra-rs/ra#50d25e9b4b6ac0595164e1d2b93711ba3577439a"
+dependencies = [
+ "cortex-m",
+ "cortex-m-rt",
+ "portable-atomic",
+ "vcell",
 ]
 
 [[package]]
@@ -146,6 +163,7 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "panic-halt",
+ "ra4m1",
 ]
 
 [[package]]

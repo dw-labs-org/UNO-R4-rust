@@ -14,7 +14,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Hoco {
+pub struct Hoco {
     pub hcstp: bool,
     pub hcfrq: u8,
 }

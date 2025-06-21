@@ -96,7 +96,7 @@ unsafe fn IEL0() {
     //         .write(|w| w.bits(0))
     // };
     // Clear the interrupt flag
-    ra4m1::Peripherals::steal().ICU.ielsr[0].modify(|_, w| w.ir()._0());
+    unsafe { ra4m1::Peripherals::steal().ICU.ielsr[0].modify(|_, w| w.ir()._0()) };
 
     // Lock the buffer to get access to it
     critical_section::with(|cs| {
@@ -113,10 +113,12 @@ unsafe fn IEL0() {
             // check if the buffer is empty
             if tx.buffer.is_empty() {
                 // Disable the transmit interrupt and enable the transmit end interrupt
-                ra4m1::Peripherals::steal()
-                    .SCI2
-                    .scr()
-                    .modify(|_, w| w.tie()._0().teie()._1());
+                unsafe {
+                    ra4m1::Peripherals::steal()
+                        .SCI2
+                        .scr()
+                        .modify(|_, w| w.tie()._0().teie()._1())
+                };
             }
         } else {
             // No more data in the buffer, disable the transmit interrupt

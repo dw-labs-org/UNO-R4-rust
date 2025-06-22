@@ -1,7 +1,7 @@
 build:    
     rm app.hex || true
     # Extract binary into hex for programmer
-    cargo objcopy  -- -O ihex app.hex
+    cargo objcopy  --release -- -O ihex app.hex
 
 flash: build
     sudo -E env "PATH=$PATH" rfp-cli -device ra -t e2l -if swd -p app.hex -run
@@ -13,4 +13,4 @@ flash_bl:
     rfp-cli -device ra -port /dev/ttyACM0 -p dfu_minima.hex
 
 show_asm:
-    cargo asm --bin uno-r4-rust 1 --rust --intel > app.asm
+    cargo asm  --bin uno-r4-rust __cortex_m_rt_main  --intel > app.asm

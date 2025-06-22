@@ -21,7 +21,7 @@ fn main() -> ! {
     // Set p111 as an output
     p.PORT1.pdr().write(|w| unsafe { w.bits(1 << 11) });
 
-    // Initialise the UART
+    // Initialise UART
     uart::init(&p);
 
     // Enable interrupts
@@ -39,17 +39,12 @@ fn main() -> ! {
     serial_print(&string);
     string.clear();
 
-    let mut count = 0;
     loop {
-        let mut string = heapless::String::<64>::new();
-        // // Write the count to the string
-        writeln!(string, "Count: {}", count).unwrap();
-        serial_print(&string);
-        count += 1;
-
-        // Turn LED on
-        p.PORT1.podr().write(|w| unsafe { w.bits(1 << 11) });
-        // Turn LED off
-        p.PORT1.podr().write(|w| unsafe { w.bits(0) });
+        if let Some(c) = uart::serial_read() {
+            // echo the received character as integer
+            let mut string = heapless::String::<8>::new();
+            writeln!(string, "{}", c as u8).unwrap();
+            serial_print(&string);
+        }
     }
 }

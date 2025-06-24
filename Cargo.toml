@@ -17,6 +17,9 @@ circular-buffer = { version = "1.1.0", default-features = false, features = [
 critical-section = "1.2.0"
 heapless = "0.8.0"
 
+embassy-hal-internal = { git = "https://github.com/embassy-rs/embassy" }
+embedded-io = "0.6.1"
+
 [[bin]]
 name = "uno-r4-rust"
 test = false

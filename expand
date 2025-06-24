@@ -1,0 +1,454 @@
+#![feature(prelude_import)]
+#![no_std]
+#![no_main]
+#[prelude_import]
+use core::prelude::rust_2024::*;
+#[macro_use]
+extern crate core;
+extern crate compiler_builtins as _;
+use core::fmt::Write;
+use embedded_io::Write as W;
+use panic_halt as _;
+use cortex_m_rt::entry;
+mod can {
+    pub fn init(p: &ra4m1::Peripherals) {}
+}
+mod clk {
+    /// Clock config
+    pub struct Config {
+        pub iclk: u8,
+        pub fck: u8,
+        pub pcka: u8,
+        pub pckb: u8,
+        pub pckc: u8,
+        pub pckd: u8,
+        pub cksel: u8,
+        pub hoco: Hoco,
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Config {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            let names: &'static _ = &[
+                "iclk",
+                "fck",
+                "pcka",
+                "pckb",
+                "pckc",
+                "pckd",
+                "cksel",
+                "hoco",
+            ];
+            let values: &[&dyn ::core::fmt::Debug] = &[
+                &self.iclk,
+                &self.fck,
+                &self.pcka,
+                &self.pckb,
+                &self.pckc,
+                &self.pckd,
+                &self.cksel,
+                &&self.hoco,
+            ];
+            ::core::fmt::Formatter::debug_struct_fields_finish(
+                f,
+                "Config",
+                names,
+                values,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Config {
+        #[inline]
+        fn clone(&self) -> Config {
+            let _: ::core::clone::AssertParamIsClone<u8>;
+            let _: ::core::clone::AssertParamIsClone<Hoco>;
+            *self
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::Copy for Config {}
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Config {}
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Config {
+        #[inline]
+        fn eq(&self, other: &Config) -> bool {
+            self.iclk == other.iclk && self.fck == other.fck && self.pcka == other.pcka
+                && self.pckb == other.pckb && self.pckc == other.pckc
+                && self.pckd == other.pckd && self.cksel == other.cksel
+                && self.hoco == other.hoco
+        }
+    }
+    #[automatically_derived]
+    impl ::core::cmp::Eq for Config {
+        #[inline]
+        #[doc(hidden)]
+        #[coverage(off)]
+        fn assert_receiver_is_total_eq(&self) -> () {
+            let _: ::core::cmp::AssertParamIsEq<u8>;
+            let _: ::core::cmp::AssertParamIsEq<Hoco>;
+        }
+    }
+    pub struct Hoco {
+        pub hcstp: bool,
+        pub hcfrq: u8,
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Hoco {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::debug_struct_field2_finish(
+                f,
+                "Hoco",
+                "hcstp",
+                &self.hcstp,
+                "hcfrq",
+                &&self.hcfrq,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Hoco {
+        #[inline]
+        fn clone(&self) -> Hoco {
+            let _: ::core::clone::AssertParamIsClone<bool>;
+            let _: ::core::clone::AssertParamIsClone<u8>;
+            *self
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::Copy for Hoco {}
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Hoco {}
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Hoco {
+        #[inline]
+        fn eq(&self, other: &Hoco) -> bool {
+            self.hcstp == other.hcstp && self.hcfrq == other.hcfrq
+        }
+    }
+    #[automatically_derived]
+    impl ::core::cmp::Eq for Hoco {
+        #[inline]
+        #[doc(hidden)]
+        #[coverage(off)]
+        fn assert_receiver_is_total_eq(&self) -> () {
+            let _: ::core::cmp::AssertParamIsEq<bool>;
+            let _: ::core::cmp::AssertParamIsEq<u8>;
+        }
+    }
+    impl Config {
+        /// Create a new clock config
+        pub fn from_system(sys: &ra4m1::SYSTEM) -> Self {
+            let divcr = sys.sckdivcr.read();
+            let iclk = divcr.ick().bits();
+            let fck = divcr.fck().bits();
+            let pcka = divcr.pcka().bits();
+            let pckb = divcr.pckb().bits();
+            let pckc = divcr.pckc().bits();
+            let pckd = divcr.pckd().bits();
+            let cksel = sys.sckscr.read().cksel().bits();
+            let hoco = sys.hococr.read();
+            let hcstp = hoco.hcstp().bit_is_set();
+            let hcfrq = (unsafe { core::ptr::read_volatile(0x4001_E037 as *const u8) }
+                >> 3);
+            Config {
+                iclk,
+                fck,
+                pcka,
+                pckb,
+                pckc,
+                pckd,
+                cksel,
+                hoco: Hoco { hcstp, hcfrq },
+            }
+        }
+    }
+}
+mod interrupts {
+    use ra4m1::Interrupt;
+    /// Defines a trait for handling interrupts.
+    ///
+    /// The on_interrupt method is called when an interrupt occurs
+    /// after binding with the bind_interrupts! macro.
+    pub trait Handler {
+        unsafe fn on_interrupt(interrupt: Interrupt);
+    }
+    /// Confirms that the Handler is bound to an interrupt
+    pub unsafe trait Binding<H: Handler> {
+        /// Get the interrupt variant (from which the index/number can be derived
+        fn interrupt() -> ra4m1::Interrupt;
+    }
+}
+mod uart {
+    use embassy_hal_internal::atomic_ring_buffer::RingBuffer;
+    use ra4m1::{SCI2, sci2};
+    use crate::interrupts::{Binding, Handler};
+    /// An SCI UART instance.
+    pub trait Instance {
+        fn peripheral() -> *const sci2::RegisterBlock;
+        fn state() -> &'static State;
+        fn event_base() -> u8;
+    }
+    pub struct TXI_Handler<T: Instance> {
+        _phantom: core::marker::PhantomData<T>,
+    }
+    impl<T: Instance> Handler for TXI_Handler<T> {
+        unsafe fn on_interrupt(interrupt: ra4m1::Interrupt) {
+            let sci = unsafe { &*T::peripheral() };
+            let p = unsafe { ra4m1::Peripherals::steal() };
+            p.ICU.ielsr[interrupt as usize].modify(|_, w| w.ir()._0());
+            let state = T::state();
+            let mut reader = unsafe { state.tx_buf.reader() };
+            let data = reader.pop_slice();
+            if !data.is_empty() {
+                sci.tdr.write(|w| unsafe { w.bits(data[0]) });
+                reader.pop_done(1);
+                if state.tx_buf.is_empty() {
+                    sci.scr().modify(|_, w| w.teie()._1().tie()._0());
+                }
+            } else {
+                sci.scr().modify(|_, w| w.tie()._0().teie()._0().te()._0());
+            }
+        }
+    }
+    pub struct TEI_Handler<T: Instance> {
+        _phantom: core::marker::PhantomData<T>,
+    }
+    impl<T: Instance> Handler for TEI_Handler<T> {
+        unsafe fn on_interrupt(interrupt: ra4m1::Interrupt) {
+            let p = unsafe { ra4m1::Peripherals::steal() };
+            p.ICU.ielsr[interrupt as usize].modify(|_, w| w.ir()._0());
+            let sci = unsafe { &*T::peripheral() };
+            sci.scr().modify(|_, w| w.teie()._0().tie()._0().te()._0());
+        }
+    }
+    struct State {
+        tx_buf: RingBuffer,
+    }
+    impl State {
+        const fn new() -> Self {
+            State { tx_buf: RingBuffer::new() }
+        }
+    }
+    /// Interface for UART operations.
+    pub struct UART<T: Instance> {
+        state: &'static State,
+        _phantom: core::marker::PhantomData<T>,
+    }
+    impl<T: Instance> UART<T> {
+        pub fn new<IRQ: Binding<TEI_Handler<T>> + Binding<TXI_Handler<T>>>(
+            _instance: T,
+            tx_buf: &mut [u8],
+            _irq: IRQ,
+        ) -> Self {
+            let sci = unsafe { &*T::peripheral() };
+            let state = T::state();
+            let tei = <IRQ as Binding<TEI_Handler<T>>>::interrupt();
+            let txi = <IRQ as Binding<TXI_Handler<T>>>::interrupt();
+            unsafe {
+                ra4m1::NVIC::unmask(tei);
+                ra4m1::NVIC::unmask(txi);
+            }
+            let p = unsafe { ra4m1::Peripherals::steal() };
+            let event_base = T::event_base();
+            p.ICU
+                .ielsr[tei as usize]
+                .write(|w| unsafe { w.iels().bits(event_base + 2) });
+            p.ICU
+                .ielsr[txi as usize]
+                .write(|w| unsafe { w.iels().bits(event_base + 1) });
+            unsafe { state.tx_buf.init(tx_buf.as_mut_ptr(), tx_buf.len()) };
+            init(&p, sci);
+            Self {
+                state,
+                _phantom: core::marker::PhantomData,
+            }
+        }
+    }
+    pub struct Error {}
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Error {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::write_str(f, "Error")
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Error {
+        #[inline]
+        fn clone(&self) -> Error {
+            *self
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::Copy for Error {}
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Error {}
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Error {
+        #[inline]
+        fn eq(&self, other: &Error) -> bool {
+            true
+        }
+    }
+    #[automatically_derived]
+    impl ::core::cmp::Eq for Error {
+        #[inline]
+        #[doc(hidden)]
+        #[coverage(off)]
+        fn assert_receiver_is_total_eq(&self) -> () {}
+    }
+    impl embedded_io::Error for Error {
+        fn kind(&self) -> embedded_io::ErrorKind {
+            embedded_io::ErrorKind::Other
+        }
+    }
+    impl<T: Instance> embedded_io::ErrorType for UART<T> {
+        type Error = Error;
+    }
+    impl<T: Instance> embedded_io::Write for UART<T> {
+        fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            loop {
+                let state = self.state;
+                let mut writer = unsafe { state.tx_buf.writer() };
+                let data = writer.push_slice();
+                if !data.is_empty() {
+                    let len = data.len().min(buf.len());
+                    data[..len].copy_from_slice(&buf[..len]);
+                    writer.push_done(len);
+                    let sci = unsafe { &*T::peripheral() };
+                    let reg = sci.scr().read();
+                    if reg.te().bit_is_clear() {
+                        sci.scr().modify(|_, w| w.tie()._1().teie()._0().te()._1());
+                    } else if reg.teie().bit_is_set() {
+                        loop {
+                            cortex_m::asm::wfi();
+                            let reg = sci.scr().read();
+                            if reg.teie().bit_is_clear() && reg.te().bit_is_clear() {
+                                break;
+                            }
+                        }
+                        sci.scr().modify(|_, w| w.tie()._1().teie()._0().te()._1());
+                    }
+                    return Ok(len);
+                } else {
+                    let sci = unsafe { &*T::peripheral() };
+                    let reg = sci.scr().read();
+                    if reg.te().bit_is_clear() {
+                        sci.scr().modify(|_, w| w.tie()._1().teie()._0().te()._1());
+                    }
+                    cortex_m::asm::wfi();
+                }
+            }
+        }
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            ::core::panicking::panic("not yet implemented")
+        }
+    }
+    impl Instance for SCI2 {
+        fn peripheral() -> *const sci2::RegisterBlock {
+            unsafe { &*SCI2::ptr() }
+        }
+        fn state() -> &'static State {
+            static STATE: State = State::new();
+            &STATE
+        }
+        fn event_base() -> u8 {
+            0xA3
+        }
+    }
+    fn init(p: &ra4m1::Peripherals, sci: &sci2::RegisterBlock) {
+        p.MSTP.mstpcrb.modify(|_, w| w.mstpb29()._0());
+        sci.scr().write(|w| unsafe { w.bits(0) });
+        sci.scr().modify(|_, w| w.cke()._00());
+        sci.simr1.write(|w| w.iicm()._0());
+        sci.spmr.write(|w| w.ckph()._0().ckpol()._0().ctse()._0().mss()._0());
+        sci.smr()
+            .write(|w| {
+                w.cks()._00().mp()._0().stop()._0().pe()._0().chr()._0().cm()._0()
+            });
+        sci.scmr.write(|w| { w.smif()._0().sinv()._0().sdir()._0().chr1()._1() });
+        sci.semr.write(|w| unsafe { w.bits(0) });
+        sci.brr.write(|w| unsafe { w.brr().bits(12) });
+        sci.sptr.write(|w| w.spb2dt()._1().spb2io()._1());
+        p.PMISC.pwpr.write(|w| w.b0wi()._0());
+        p.PMISC.pwpr.write(|w| w.pfswe()._1());
+        p.PFS.p301pfs().write(|w| unsafe { w.bits(0) });
+        p.PFS.p301pfs().write(|w| w.psel().variant(0b00100));
+        p.PFS.p301pfs().modify(|_, w| w.pmr()._1());
+        p.PFS.p302pfs().write(|w| unsafe { w.bits(0) });
+        p.PFS.p302pfs().write(|w| w.pdr()._1().podr()._1());
+        p.PFS.p302pfs().modify(|_, w| unsafe { w.psel().bits(0b00100) });
+        p.PFS.p302pfs().modify(|_, w| w.pmr()._1());
+    }
+}
+struct Irq;
+#[automatically_derived]
+impl ::core::marker::Copy for Irq {}
+#[automatically_derived]
+impl ::core::clone::Clone for Irq {
+    #[inline]
+    fn clone(&self) -> Irq {
+        *self
+    }
+}
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn IEL4() {
+    unsafe {
+        <uart::TXI_Handler<
+            ra4m1::SCI2,
+        > as crate::interrupts::Handler>::on_interrupt(ra4m1::Interrupt::IEL4)
+    };
+}
+unsafe impl crate::interrupts::Binding<uart::TXI_Handler<ra4m1::SCI2>> for Irq {
+    fn interrupt() -> ra4m1::Interrupt {
+        ra4m1::Interrupt::IEL4
+    }
+}
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn IEL5() {
+    unsafe {
+        <uart::TEI_Handler<
+            ra4m1::SCI2,
+        > as crate::interrupts::Handler>::on_interrupt(ra4m1::Interrupt::IEL5)
+    };
+}
+unsafe impl crate::interrupts::Binding<uart::TEI_Handler<ra4m1::SCI2>> for Irq {
+    fn interrupt() -> ra4m1::Interrupt {
+        ra4m1::Interrupt::IEL5
+    }
+}
+#[doc(hidden)]
+#[export_name = "main"]
+pub unsafe extern "C" fn __cortex_m_rt_main_trampoline() {
+    #[allow(static_mut_refs)] __cortex_m_rt_main()
+}
+fn __cortex_m_rt_main() -> ! {
+    let p = unsafe { ra4m1::Peripherals::steal() };
+    p.PORT1.pdr().write(|w| unsafe { w.bits(1 << 11) });
+    let mut tx_buf = [0u8; 16];
+    let mut uart = uart::UART::new(p.SCI2, &mut tx_buf, Irq);
+    unsafe { cortex_m::interrupt::enable() }
+    p.MSTP.mstpcrb.modify(|_, w| { w.mstpb11()._0() });
+    p.USBFS.usbmc.write(|w| w.vdcen()._1());
+    cortex_m::asm::delay(1_000_000);
+    let mut string = heapless::String::<256>::new();
+    let config = clk::Config::from_system(&p.SYSTEM);
+    string.write_fmt(format_args!("{0:?}\n", config)).unwrap();
+    string.clear();
+    for count in 0..1000000000 {
+        string.write_fmt(format_args!("Count: {0}\n", count)).unwrap();
+        uart.write_all(string.as_bytes()).unwrap();
+        string.clear();
+        for _ in 0..(count * 1000) {
+            cortex_m::asm::nop();
+        }
+    }
+    loop {
+        cortex_m::asm::nop();
+    }
+}

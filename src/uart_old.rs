@@ -17,10 +17,10 @@ pub fn init(p: &ra4m1::Peripherals) {
     };
 
     // Enable interrupt for SCI2_TXI, SCI2_TEI and SCI2_RXI
-    p.ICU.ielsr[0].write(|w| unsafe { w.iels().bits(0x0A4) });
-    p.ICU.ielsr[1].write(|w| unsafe { w.iels().bits(0x0A5) });
-    p.ICU.ielsr[2].write(|w| unsafe { w.iels().bits(0x0A3) });
-    p.ICU.ielsr[3].write(|w| unsafe { w.iels().bits(0x0A6) });
+    p.ICU.ielsr[0].write(|w| unsafe { w.iels().bits(0xA4) });
+    p.ICU.ielsr[1].write(|w| unsafe { w.iels().bits(0xA5) });
+    p.ICU.ielsr[2].write(|w| unsafe { w.iels().bits(0xA3) });
+    p.ICU.ielsr[3].write(|w| unsafe { w.iels().bits(0xA6) });
 
     // Enable SCI
     p.MSTP.mstpcrb.modify(|_, w| w.mstpb29()._0()); // Enable SCI2
@@ -96,9 +96,9 @@ pub fn init(p: &ra4m1::Peripherals) {
 #[interrupt]
 unsafe fn IEL0() {
     // Interrupt for SCI2_TXI
-
+    let p = unsafe { ra4m1::Peripherals::steal() };
     // Clear the interrupt flag
-    unsafe { ra4m1::Peripherals::steal().ICU.ielsr[0].modify(|_, w| w.ir()._0()) };
+    p.ICU.ielsr[0].modify(|_, w| w.ir()._0());
 
     // Lock the buffer to get access to it
     critical_section::with(|cs| {
@@ -106,30 +106,15 @@ unsafe fn IEL0() {
         // Pop a byte from the buffer
         if let Some(value) = tx.buffer.pop_front() {
             // Write the value to the transmit data register
-            unsafe {
-                ra4m1::Peripherals::steal()
-                    .SCI2
-                    .tdr
-                    .write(|w| w.bits(value))
-            };
+            p.SCI2.tdr.write(|w| unsafe { w.bits(value) });
             // check if the buffer is empty
             if tx.buffer.is_empty() {
                 // Disable the transmit interrupt and enable the transmit end interrupt
-                unsafe {
-                    ra4m1::Peripherals::steal()
-                        .SCI2
-                        .scr()
-                        .modify(|_, w| w.tie()._0().teie()._1())
-                };
+                p.SCI2.scr().modify(|_, w| w.tie()._0().teie()._1());
             }
         } else {
             // No more data in the buffer, disable the transmit interrupt
-            unsafe {
-                ra4m1::Peripherals::steal()
-                    .SCI2
-                    .scr()
-                    .modify(|_, w| w.tie()._0().teie()._0());
-            }
+            p.SCI2.scr().modify(|_, w| w.tie()._0().teie()._0());
         }
     });
 }
@@ -139,17 +124,16 @@ fn IEL1() {
     // This is the interrupt for SCI2_TEI
     // Triggers when the last byte has been transmitted
     // Clear the interrupt flag
-    unsafe {
-        ra4m1::Peripherals::steal().ICU.ielsr[1].modify(|_, w| w.ir()._0());
-    }
+    let p = unsafe { ra4m1::Peripherals::steal() };
+
+    p.ICU.ielsr[1].modify(|_, w| w.ir()._0());
 
     // Disable transmission and interrupts
-    unsafe {
-        ra4m1::Peripherals::steal()
-            .SCI2
-            .scr()
-            .modify(|_, w| w.teie()._0().tie()._0().te()._0());
-    }
+
+    p.SCI2
+        .scr()
+        .modify(|_, w| w.teie()._0().tie()._0().te()._0());
+
     // Try start again if needed
     critical_section::with(|cs| {
         let mut tx = TX.borrow(cs).borrow_mut();
@@ -182,21 +166,21 @@ fn IEL2() {
 #[interrupt]
 fn IEL3() {
     // This is the interrupt for SCI2_ERI
-    // Error interrupt handler, not used in this example
-    // Clear the interrupt flag
-    unsafe {
-        ra4m1::Peripherals::steal().ICU.ielsr[3].modify(|_, w| w.ir()._0());
-    }
-    // Set pin high to indicate an error
     let p = unsafe { ra4m1::Peripherals::steal() };
-    p.PORT1.podr().write(|w| unsafe { w.bits(1 << 11) });
+    // Clear the interrupt flag
+    p.ICU.ielsr[3].modify(|_, w| w.ir()._0());
+
+    // Clear error flags
+    p.SCI2
+        .ssr()
+        .modify(|_, w| w.per()._0().fer()._0().orer()._0());
 }
 
 /// Static object that holds the circular buffer
 /// And ensures interrupt free manipulation of registers by existing
 /// inside a mutex
 struct Tx {
-    buffer: circular_buffer::CircularBuffer<64, u8>,
+    buffer: circular_buffer::CircularBuffer<128, u8>,
 }
 
 impl Tx {
@@ -238,22 +222,6 @@ impl Rx {
             buffer: circular_buffer::CircularBuffer::new(),
         }
     }
-
-    // Can be called in the RXI interrupt handler to start receiving data
-    fn start_receive(&mut self) {
-        let p = unsafe { ra4m1::Peripherals::steal() };
-        p.SCI2.scr().modify(|r, w| {
-            if r.rie().bit_is_set() {
-                // do nothing, reception is already in progress
-                w
-            } else {
-                w.re()
-                    ._1() // Enable reception
-                    .rie()
-                    ._1() // Enable receive interrupt
-            }
-        });
-    }
 }
 
 pub fn serial_print(str: &str) {
@@ -265,9 +233,7 @@ pub fn serial_print(str: &str) {
     loop {
         // Loop until all bytes are pushed to the buffer
         let mut done = true;
-        let p = unsafe { ra4m1::Peripherals::steal() };
         // Get access to buffer
-
         critical_section::with(|cs| {
             let mut tx = TX.borrow(cs).borrow_mut();
             // Loop through remaining bytes

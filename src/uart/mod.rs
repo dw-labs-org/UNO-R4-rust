@@ -61,57 +61,127 @@ impl<T: Instance> Handler for TEI_Handler<T> {
     }
 }
 
+pub struct RXI_Handler<T: Instance> {
+    _phantom: core::marker::PhantomData<T>,
+}
+
+impl<T: Instance> Handler for RXI_Handler<T> {
+    unsafe fn on_interrupt(interrupt: ra4m1::Interrupt) {
+        // Clear the interrupt flag
+        let p = unsafe { ra4m1::Peripherals::steal() };
+        p.ICU.ielsr[interrupt as usize].modify(|_, w| w.ir()._0());
+        // Get data, do stuff
+        let sci = unsafe { &*T::peripheral() };
+        let state = T::state();
+        let byte = sci.rdr.read().bits();
+        // Get writer for the RX buffer
+        let mut writer = unsafe { state.rx_buf.writer() };
+        // Try write to buffer
+        // Should probably indicate the user if this fails
+        // indicating a buffer overflow
+        writer.push_one(byte);
+    }
+}
+
+pub struct ERI_Handler<T: Instance> {
+    _phantom: core::marker::PhantomData<T>,
+}
+
+impl<T: Instance> Handler for ERI_Handler<T> {
+    unsafe fn on_interrupt(interrupt: ra4m1::Interrupt) {
+        // Clear the interrupt flag
+        let p = unsafe { ra4m1::Peripherals::steal() };
+        p.ICU.ielsr[interrupt as usize].modify(|_, w| w.ir()._0());
+        // Clear error flags
+        let sci = unsafe { &*T::peripheral() };
+        sci.ssr().modify(|_, w| w.orer()._0().fer()._0().per()._0());
+    }
+}
+
 struct State {
     tx_buf: RingBuffer,
+    rx_buf: RingBuffer,
 }
 
 impl State {
     const fn new() -> Self {
         State {
             tx_buf: RingBuffer::new(),
+            rx_buf: RingBuffer::new(),
         }
     }
 }
 
 /// Interface for UART operations.
-pub struct UART<T: Instance> {
+pub struct Uart<T: Instance> {
+    tx: UartTx<T>,
+    rx: UartRx<T>,
+}
+
+pub struct UartTx<T: Instance> {
     state: &'static State,
     _phantom: core::marker::PhantomData<T>,
 }
 
-impl<T: Instance> UART<T> {
-    pub fn new<IRQ: Binding<TEI_Handler<T>> + Binding<TXI_Handler<T>>>(
-        _instance: T,
-        tx_buf: &mut [u8],
-        _irq: IRQ,
-    ) -> Self {
+pub struct UartRx<T: Instance> {
+    state: &'static State,
+    _phantom: core::marker::PhantomData<T>,
+}
+
+impl<T: Instance> Uart<T> {
+    pub fn new<IRQ>(_instance: T, tx_buf: &mut [u8], rx_buf: &mut [u8], _irq: IRQ) -> Self
+    where
+        IRQ: Binding<TEI_Handler<T>>
+            + Binding<TXI_Handler<T>>
+            + Binding<RXI_Handler<T>>
+            + Binding<ERI_Handler<T>>,
+    {
         let sci = unsafe { &*T::peripheral() };
         let state = T::state();
 
         // Get interrupts for TXE and TEI
         let tei = <IRQ as Binding<TEI_Handler<T>>>::interrupt();
-        let txi: ra4m1::Interrupt = <IRQ as Binding<TXI_Handler<T>>>::interrupt();
+        let txi = <IRQ as Binding<TXI_Handler<T>>>::interrupt();
+        let rxi = <IRQ as Binding<RXI_Handler<T>>>::interrupt();
+        let eri = <IRQ as Binding<ERI_Handler<T>>>::interrupt();
 
         // Unmask the interrupts in the NVIC
         unsafe {
-            ra4m1::NVIC::unmask(tei);
+            ra4m1::NVIC::unmask(rxi);
             ra4m1::NVIC::unmask(txi);
+            ra4m1::NVIC::unmask(tei);
+            ra4m1::NVIC::unmask(eri);
         }
         let p = unsafe { ra4m1::Peripherals::steal() };
         // Event number of RXI
         let event_base = T::event_base();
-        p.ICU.ielsr[tei as usize].write(|w| unsafe { w.iels().bits(event_base + 2) });
+        // Map events to interrupts
+        p.ICU.ielsr[rxi as usize].write(|w| unsafe { w.iels().bits(event_base) });
         p.ICU.ielsr[txi as usize].write(|w| unsafe { w.iels().bits(event_base + 1) });
+        p.ICU.ielsr[tei as usize].write(|w| unsafe { w.iels().bits(event_base + 2) });
+        p.ICU.ielsr[eri as usize].write(|w| unsafe { w.iels().bits(event_base + 3) });
 
-        // Initialise the buffer
+        // Initialise the buffers
         unsafe { state.tx_buf.init(tx_buf.as_mut_ptr(), tx_buf.len()) };
+        unsafe { state.rx_buf.init(rx_buf.as_mut_ptr(), rx_buf.len()) };
         // Configure the SCI peripheral
         init(&p, sci);
 
         Self {
-            state,
-            _phantom: core::marker::PhantomData,
+            tx: UartTx {
+                state,
+                _phantom: core::marker::PhantomData,
+            },
+            rx: UartRx {
+                state,
+                _phantom: core::marker::PhantomData,
+            },
         }
+    }
+
+    /// Split the Uart into a transmitter and receiver.
+    pub fn split(self) -> (UartTx<T>, UartRx<T>) {
+        (self.tx, self.rx)
     }
 }
 
@@ -124,11 +194,11 @@ impl embedded_io::Error for Error {
     }
 }
 
-impl<T: Instance> embedded_io::ErrorType for UART<T> {
+impl<T: Instance> embedded_io::ErrorType for UartTx<T> {
     type Error = Error;
 }
 
-impl<T: Instance> embedded_io::Write for UART<T> {
+impl<T: Instance> embedded_io::Write for UartTx<T> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         loop {
             let state = self.state;
@@ -191,6 +261,64 @@ impl<T: Instance> embedded_io::Write for UART<T> {
                 cortex_m::asm::wfi();
             }
         }
+    }
+}
+
+impl<T: Instance> embedded_io::ErrorType for Uart<T> {
+    type Error = Error;
+}
+
+impl<T: Instance> embedded_io::Write for Uart<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        self.tx.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.tx.flush()
+    }
+}
+
+// ================ Read Traits ================
+impl<T: Instance> embedded_io::ErrorType for UartRx<T> {
+    type Error = Error;
+}
+
+impl<T: Instance> embedded_io::Read for UartRx<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        loop {
+            let mut reader = unsafe { self.state.rx_buf.reader() };
+            let data = reader.pop_slice();
+            if !data.is_empty() {
+                // Copy data to the buffer
+                let len = data.len().min(buf.len());
+                buf[..len].copy_from_slice(&data[..len]);
+                // Inform the reader that we popped some data
+                reader.pop_done(len);
+                // Return the number of bytes read
+                return Ok(len);
+            } else {
+                // No data in the buffer, wait for more data
+                cortex_m::asm::wfi();
+            }
+        }
+    }
+}
+
+impl<T: Instance> embedded_io::ReadReady for UartRx<T> {
+    fn read_ready(&mut self) -> Result<bool, Self::Error> {
+        Ok(!self.state.rx_buf.is_empty())
+    }
+}
+
+impl<T: Instance> embedded_io::Read for Uart<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.rx.read(buf)
+    }
+}
+
+impl<T: Instance> embedded_io::ReadReady for Uart<T> {
+    fn read_ready(&mut self) -> Result<bool, Self::Error> {
+        self.rx.read_ready()
     }
 }
 
@@ -277,5 +405,5 @@ fn init(p: &ra4m1::Peripherals, sci: &sci2::RegisterBlock) {
     p.PFS.p302pfs().modify(|_, w| w.pmr()._1());
 
     // Start receiving with interrupts
-    // sci.scr().modify(|_, w| w.re()._1().rie()._1());
+    sci.scr().modify(|_, w| w.re()._1().rie()._1());
 }

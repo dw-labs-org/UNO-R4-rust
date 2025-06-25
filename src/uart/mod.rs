@@ -112,6 +112,12 @@ impl State {
     }
 }
 
+unsafe impl Send for State {}
+unsafe impl Sync for State {}
+
+unsafe impl Sync for Uart<SCI2> {}
+unsafe impl Send for Uart<SCI2> {}
+
 /// Interface for UART operations.
 pub struct Uart<T: Instance> {
     tx: UartTx<T>,
@@ -122,6 +128,9 @@ pub struct UartTx<T: Instance> {
     state: &'static State,
     _phantom: core::marker::PhantomData<T>,
 }
+
+unsafe impl<T: Instance> Send for UartTx<T> {}
+unsafe impl<T: Instance> Sync for UartTx<T> {}
 
 pub struct UartRx<T: Instance> {
     state: &'static State,

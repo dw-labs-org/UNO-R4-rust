@@ -19,6 +19,8 @@ heapless = "0.8.0"
 
 embassy-hal-internal = { git = "https://github.com/embassy-rs/embassy" }
 embedded-io = "0.6.1"
+log = "0.4.27"
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 
 [[bin]]
 name = "uno-r4-rust"

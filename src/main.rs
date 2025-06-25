@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 
+use core::mem::MaybeUninit;
+
+use ::log::info;
 use embedded_io::{Read, ReadReady, Write as W};
 // pick a panicking behavior
 use panic_halt as _;
@@ -10,6 +13,7 @@ use cortex_m_rt::entry;
 mod can;
 mod clk;
 mod interrupts;
+
 mod uart;
 
 bind_interrupts!(struct Irq {
@@ -29,15 +33,15 @@ fn main() -> ! {
 
     let mut tx_buf = [0u8; 64];
     let mut rx_buf = [0u8; 64];
-
-    let mut uart = uart::Uart::new(p.SCI2, &mut tx_buf, &mut rx_buf, Irq);
+    let uart = uart::Uart::new(p.SCI2, &mut tx_buf, &mut rx_buf, Irq);
+    let (mut tx, rx) = uart.split();
 
     // Enable interrupts
     unsafe { cortex_m::interrupt::enable() }
 
     // Enable usb 3.3V to rs232 converter
     p.MSTP.mstpcrb.modify(|_, w| {
-        // Enable USBFS and SCI2
+        // Enable USBFS
         w.mstpb11()._0()
     });
     p.USBFS.usbmc.write(|w| w.vdcen()._1());
@@ -45,8 +49,8 @@ fn main() -> ! {
     // wait for a bit to stabilize the USB power
     cortex_m::asm::delay(1_000_000);
 
-    // Serial should be ready now
-    uart.write_all("Hello, RA4M1!\n".as_bytes()).unwrap();
+    // can init
+    can::init(&mut tx);
 
     // Print the clock configuration
     // let mut string = heapless::String::<256>::new();
@@ -58,19 +62,6 @@ fn main() -> ! {
     // string.clear();
     // let mut count = 0;
     loop {
-        let mut buf = [0u8; 64];
-        // Read data from the UART
-        if uart.read_ready().unwrap() {
-            let bytes = uart.read(&mut buf).unwrap();
-            // Echo the data back
-            for v in &buf[..bytes] {
-                // Write the byte to the UART
-                uart.write_fmt(format_args!("0x{:02X} ", v)).unwrap();
-            }
-            uart.write(b"\n").unwrap();
-        } else {
-            // No data ready, just wait
-            cortex_m::asm::wfi();
-        }
+        // tx.write_all(b"Hello from RA4M1!\n").unwrap();
     }
 }

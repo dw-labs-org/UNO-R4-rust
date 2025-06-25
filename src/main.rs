@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::fmt::Write;
 use embedded_io::{Read, ReadReady, Write as W};
 // pick a panicking behavior
 use panic_halt as _;

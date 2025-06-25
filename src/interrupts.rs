@@ -56,6 +56,9 @@ pub trait Handler {
 }
 
 /// Confirms that the Handler is bound to an interrupt
+///
+/// ## Safety
+/// Must only be implemented using the `bind_interrupts!` macro.
 pub unsafe trait Binding<H: Handler> {
     /// Get the interrupt variant (from which the index/number can be derived
     fn interrupt() -> ra4m1::Interrupt;

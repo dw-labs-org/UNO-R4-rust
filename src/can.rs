@@ -215,6 +215,18 @@ impl Default for MailboxConfig {
 }
 
 impl MailboxConfig {
+    pub fn set_mailbox_receiver(&mut self, index: usize) {
+        // Set the mailbox at the given index to receive mode
+        if index < 32 {
+            self.mailboxes[index] = MailboxMode::Rx(MailboxRxConfig {
+                interrupt: false,
+                one_shot: false,
+                mask_valid: true,                   // Default to valid mask
+                id: Id::Standard(StandardId::ZERO), // Default ID, will be set later
+            });
+        }
+    }
+
     fn mier(&self) -> u32 {
         // Generate the Mailbox Interrupt Enable Register (MIER) value
         // based on the mailbox configuration.
@@ -560,6 +572,36 @@ impl Can {
             }
         }
         Err(())
+    }
+
+    pub fn try_receive_frame(&self) -> Option<Frame> {
+        // Check each mailbox for received frames
+        for i in 0..32 {
+            let r = self.reg.mctl_rx()[i].read();
+            // Check if the mailbox has a received frame
+            if r.newdata().bit_is_set() {
+                // Read the ID from the mailbox ID register
+                let id = unsafe { mb_id(&self.reg, i).read_volatile() };
+                let id = MailboxId::from_bits(id);
+                // Read the DLC
+                let dlc = unsafe { mb_dl(&self.reg, i).read_volatile() };
+                // Read the data from the mailbox data registers
+                let mut data = [0; 8];
+                let data_ptr = unsafe { mb_d0(&self.reg, i) };
+                for (j, b) in data[..(dlc as usize)].iter_mut().enumerate() {
+                    *b = unsafe { data_ptr.add(j).read_volatile() };
+                }
+                // Go back to ready state
+                self.reg.mctl_rx()[i].write(|w| w.recreq()._1()); // Clear the receive request
+                return Some(Frame {
+                    id,
+                    dlc,
+                    data,
+                    ts: 0, // Timestamp is not used here
+                });
+            }
+        }
+        None // No frame received
     }
 }
 

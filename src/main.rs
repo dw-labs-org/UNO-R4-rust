@@ -55,17 +55,30 @@ fn main() -> ! {
     tx.write_all("\nHello from RA4M1!\n".as_bytes()).unwrap();
 
     // can init
-    let can = can::Can::new(p.CAN0, BitConfig::new_checked(false, 3, 5, 2, 1).unwrap());
+    let mut can = can::Can::new(p.CAN0, BitConfig::new_checked(false, 3, 5, 2, 1).unwrap());
 
     tx.write_all(b"CAN initialized\n").unwrap();
 
+    let mut mailbox = can::MailboxConfig::default();
+    mailbox.set_mailbox_receiver(0);
+    can.configure_mailboxes(mailbox);
+
     can.start();
 
+    // Send a test frame
+    let test_frame = Frame::new(
+        Id::Standard(StandardId::new(0x123).unwrap()),
+        &[0x11, 0x22, 0x33, 0x44],
+    )
+    .unwrap();
+    can.send_frame(test_frame).unwrap();
+
     loop {
-        for i in 0..16 {
-            let frame =
-                can::Frame::new(Id::Standard(StandardId::new(i as u16).unwrap()), &[i; 1]).unwrap();
-            while can.send_frame(frame).is_err() {}
+        if let Some(frame) = can.try_receive_frame() {
+            tx.write_fmt(format_args!("Received frame: {:?}\n", frame))
+                .unwrap();
+            // Echo the frame back
+            can.send_frame(frame).unwrap();
         }
     }
 }

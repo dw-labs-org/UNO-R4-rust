@@ -4,11 +4,14 @@
 use core::mem::MaybeUninit;
 
 use ::log::info;
+use embedded_can::{Frame, Id, StandardId};
 use embedded_io::{Read, ReadReady, Write as W};
 // pick a panicking behavior
 use panic_halt as _;
 
 use cortex_m_rt::entry;
+
+use crate::can::BitConfig;
 
 mod can;
 mod clk;
@@ -49,19 +52,20 @@ fn main() -> ! {
     // wait for a bit to stabilize the USB power
     cortex_m::asm::delay(1_000_000);
 
+    tx.write_all("\nHello from RA4M1!\n".as_bytes()).unwrap();
+
     // can init
-    can::init(&mut tx);
+    let can = can::Can::new(p.CAN0, BitConfig::new_checked(false, 3, 5, 2, 1).unwrap());
 
-    // Print the clock configuration
-    // let mut string = heapless::String::<256>::new();
-    // // Read the clock register
-    // let config = clk::Config::from_system(&p.SYSTEM);
+    tx.write_all(b"CAN initialized\n").unwrap();
 
-    // writeln!(string, "{:?}", config).unwrap();
-    // uart.write_all(string.as_bytes()).unwrap();
-    // string.clear();
-    // let mut count = 0;
+    can.start();
+
     loop {
-        // tx.write_all(b"Hello from RA4M1!\n").unwrap();
+        for i in 0..16 {
+            let frame =
+                can::Frame::new(Id::Standard(StandardId::new(i as u16).unwrap()), &[i; 1]).unwrap();
+            while can.send_frame(frame).is_err() {}
+        }
     }
 }

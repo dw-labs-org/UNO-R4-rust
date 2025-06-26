@@ -24,6 +24,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46afbd2983a5d5a7bd740ccb198caf5b82f45c40c09c0eed36052d91cb92e719"
 
 [[package]]
+name = "bitfield-struct"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3ca019570363e800b05ad4fd890734f28ac7b72f563ad8a35079efb793616f8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -83,6 +94,15 @@ version = "0.2.0"
 source = "git+https://github.com/embassy-rs/embassy#7ac2076be000a19da254775ef4f1517cbfd94c41"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "embedded-can"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9d2e857f87ac832df68fa498d18ddc679175cf3d2e4aa893988e5601baf9438"
+dependencies = [
+ "nb 1.1.0",
 ]
 
 [[package]]
@@ -258,11 +278,13 @@ checksum = "5a5f39404a5da50712a4c1eecf25e90dd62b613502b7e925fd4e4d19b5c96512"
 name = "uno-r4-rust"
 version = "0.1.0"
 dependencies = [
+ "bitfield-struct",
  "circular-buffer",
  "cortex-m",
  "cortex-m-rt",
  "critical-section",
  "embassy-hal-internal",
+ "embedded-can",
  "embedded-io",
  "heapless",
  "lazy_static",

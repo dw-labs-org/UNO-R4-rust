@@ -21,6 +21,8 @@ embassy-hal-internal = { git = "https://github.com/embassy-rs/embassy" }
 embedded-io = "0.6.1"
 log = "0.4.27"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+embedded-can = "0.4.1"
+bitfield-struct = "0.11.0"
 
 [[bin]]
 name = "uno-r4-rust"

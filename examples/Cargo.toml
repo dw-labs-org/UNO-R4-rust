@@ -18,9 +18,11 @@ circular-buffer = { version = "1.1.0", default-features = false, features = [
 critical-section = "1.2.0"
 heapless = "0.8.0"
 
+rtic-monotonics = { version = "2.1.0", features = ["cortex-m-systick"] }
 embassy-hal-internal = { git = "https://github.com/embassy-rs/embassy" }
 embedded-io = "0.6.1"
 log = "0.4.27"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 embedded-can = "0.4.1"
 bitfield-struct = "0.11.0"
+rtic = { version = "2.2.0", features = ["thumbv7-backend"] }

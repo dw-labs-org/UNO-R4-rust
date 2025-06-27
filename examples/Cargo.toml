@@ -1,9 +1,10 @@
 [package]
-name = "uno-r4-rust"
+name = "uno-r4-examples"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+uno-r4-rust = { path = "../" }
 ra4m1 = { version = "0.2.1", git = "https://github.com/ra-rs/ra", features = [
     "rt",
     "critical-section",

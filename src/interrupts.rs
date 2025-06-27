@@ -63,3 +63,38 @@ pub unsafe trait Binding<H: Handler> {
     /// Get the interrupt variant (from which the index/number can be derived
     fn interrupt() -> ra4m1::Interrupt;
 }
+
+pub fn clear_interrupt(interrupt: Interrupt) {
+    let p = unsafe { ra4m1::Peripherals::steal() };
+    p.ICU.ielsr[interrupt as usize].modify(|_, w| w.ir().clear_bit());
+}
+
+pub fn enable_interrupt(interrupt: Interrupt) {
+    // Enable the interrupt by writing to the interrupt enable register
+    unsafe {
+        ra4m1::NVIC::unmask(interrupt);
+    }
+}
+
+pub fn disable_interrupt(interrupt: Interrupt) {
+    // Disable the interrupt by writing to the interrupt disable register
+
+    ra4m1::NVIC::mask(interrupt);
+}
+
+pub fn pend_interrupt(interrupt: Interrupt) {
+    // Pend the interrupt by writing to the interrupt pend register
+    ra4m1::NVIC::pend(interrupt);
+}
+
+pub fn map_interrupt(interrupt: Interrupt, event_id: u8) {
+    // Map the interrupt to a specific priority
+    let p = unsafe { ra4m1::Peripherals::steal() };
+    p.ICU.ielsr[interrupt as usize].write(|w| unsafe { w.iels().bits(event_id) });
+}
+
+pub fn map_and_enable_interrupt(interrupt: Interrupt, event_id: u8) {
+    // Map and enable the interrupt
+    map_interrupt(interrupt, event_id);
+    enable_interrupt(interrupt);
+}

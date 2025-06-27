@@ -333,7 +333,7 @@ impl<T: Instance> embedded_io::ReadReady for Uart<T> {
 
 impl Instance for SCI2 {
     fn peripheral() -> *const sci2::RegisterBlock {
-        unsafe { &*SCI2::ptr() }
+        SCI2::ptr()
     }
 
     fn state() -> &'static State {

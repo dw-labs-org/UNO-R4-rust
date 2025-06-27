@@ -1,9 +1,50 @@
-use core::default;
-
 use embedded_io::Write;
-use ra4m1::{CAN0, adc140::adads0::R, generic::Reg};
+use ra4m1::CAN0;
 
 use embedded_can::{ExtendedId, Id, StandardId};
+
+use crate::interrupts::{Binding, Handler, clear_interrupt, map_and_enable_interrupt};
+
+trait Instance {
+    fn peripheral() -> *const ra4m1::can0::RegisterBlock;
+}
+
+impl Instance for ra4m1::CAN0 {
+    fn peripheral() -> *const ra4m1::can0::RegisterBlock {
+        // Return the pointer to the CAN0 peripheral
+        CAN0::ptr()
+    }
+}
+
+/// Triggers on transmission of a frame.
+pub struct TxHandler<I: Instance> {
+    _phantom: core::marker::PhantomData<I>,
+}
+
+impl<I: Instance> Handler for TxHandler<I> {
+    unsafe fn on_interrupt(interrupt: ra4m1::Interrupt) {
+        // led
+        let p = unsafe { ra4m1::Peripherals::steal() };
+        p.PORT1.podr().modify(|_, w| w.bits(1 << 11)); // Set P111 high
+        clear_interrupt(interrupt);
+        // Get access to can registers
+        let can = unsafe { &*I::peripheral() };
+        // save msmr state
+        let msmr = can.msmr.read().bits();
+        // Search for transmit
+        can.msmr.write(|w| w.mbsm()._01());
+        // get mailbox
+        let mailbox = can.mssr.read().bits() as usize;
+        // check there is one
+        if mailbox < 32 {
+            // Clear the mailbox status
+            can.mctl_tx()[mailbox].write(|w| unsafe { w.bits(0) });
+            can.mctl_tx()[mailbox].write(|w| unsafe { w.bits(0) });
+        }
+        // Restore msmr state
+        can.msmr.write(|w| unsafe { w.bits(msmr) });
+    }
+}
 
 /// Frame that matches the layout of the CAN mailbox registers.
 ///
@@ -227,6 +268,16 @@ impl MailboxConfig {
         }
     }
 
+    pub fn enable_all_interrupts(&mut self) {
+        // Enable interrupts for all mailboxes
+        for mailbox in &mut self.mailboxes {
+            match mailbox {
+                MailboxMode::Tx(config) => config.interrupt = true,
+                MailboxMode::Rx(config) => config.interrupt = true,
+            }
+        }
+    }
+
     fn mier(&self) -> u32 {
         // Generate the Mailbox Interrupt Enable Register (MIER) value
         // based on the mailbox configuration.
@@ -364,10 +415,16 @@ impl Can {
     ///
     /// Will enter reset mode, configure the peripheral, then go to halt mode ready
     /// for mailbox configuration.
-    pub fn new(can: CAN0, bit_config: BitConfig) -> Self {
+    pub fn new<IRQ>(can: CAN0, bit_config: BitConfig, irq: IRQ) -> Self
+    where
+        IRQ: Binding<TxHandler<ra4m1::CAN0>>,
+    {
         // TX pin is D4 / p103
         // RX pin is D5 / p102
         let p = unsafe { ra4m1::Peripherals::steal() };
+
+        // Enable and map interrupts
+        map_and_enable_interrupt(<IRQ as Binding<TxHandler<ra4m1::CAN0>>>::interrupt(), 0x4E);
 
         // Set the pins for CAN0
 
@@ -538,16 +595,11 @@ impl Can {
         for i in 0..32 {
             let r = self.reg.mctl_tx()[i].read();
             // Check if the mailbox is available for transmission
-            if (r.trmreq().bit_is_clear() || r.sentdata().bit_is_set()) && r.recreq().bit_is_clear()
-            {
+            if r.trmreq().bit_is_clear() && r.recreq().bit_is_clear() {
                 {
-                    // clear trmreq then sentdata
-                    self.reg.mctl_tx()[i].write(|w| unsafe { w.bits(0) });
-                    self.reg.mctl_tx()[i].write(|w| unsafe { w.bits(0) });
-
                     // Write the ID to the mailbox ID register
                     unsafe {
-                        mb_id(&self.reg, i).write_volatile(MailboxId::from(frame.id).into_bits());
+                        mb_id(&self.reg, i).write_volatile(frame.id.into_bits());
                     }
                     // write the dlc
                     unsafe {
@@ -564,7 +616,7 @@ impl Can {
                         }
                     }
                     // Put mailbox id into first byte
-                    unsafe { data_ptr.write_volatile(i as u8) };
+                    // unsafe { data_ptr.write_volatile(i as u8) };
                     // Request transmission
                     self.reg.mctl_tx()[i].write(|w| w.trmreq()._1());
                     return Ok(()); // Exit after sending the frame
@@ -579,7 +631,11 @@ impl Can {
         for i in 0..32 {
             let r = self.reg.mctl_rx()[i].read();
             // Check if the mailbox has a received frame
-            if r.newdata().bit_is_set() {
+            if r.newdata().bit_is_set() && r.trmreq().bit_is_clear() {
+                // clear register
+                self.reg.mctl_rx()[i].write(|w| unsafe {
+                    w.bits(0) // Clear the mailbox control register
+                });
                 // Read the ID from the mailbox ID register
                 let id = unsafe { mb_id(&self.reg, i).read_volatile() };
                 let id = MailboxId::from_bits(id);

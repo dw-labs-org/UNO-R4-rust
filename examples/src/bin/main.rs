@@ -10,20 +10,14 @@ use embedded_io::{Read, ReadReady, Write as W};
 use panic_halt as _;
 
 use cortex_m_rt::entry;
-
-use crate::can::BitConfig;
-
-mod can;
-mod clk;
-mod interrupts;
-
-mod uart;
+use uno_r4_rust::{bind_interrupts, can, uart};
 
 bind_interrupts!(struct Irq {
     IEL4 => uart::TXI_Handler<ra4m1::SCI2>;
     IEL5 => uart::TEI_Handler<ra4m1::SCI2>;
     IEL6 => uart::RXI_Handler<ra4m1::SCI2>;
     IEL7 => uart::ERI_Handler<ra4m1::SCI2>;
+    IEL8 => can::TxHandler<ra4m1::CAN0>;
 });
 
 #[entry]
@@ -55,30 +49,31 @@ fn main() -> ! {
     tx.write_all("\nHello from RA4M1!\n".as_bytes()).unwrap();
 
     // can init
-    let mut can = can::Can::new(p.CAN0, BitConfig::new_checked(false, 3, 5, 2, 1).unwrap());
+    let mut can = can::Can::new(
+        p.CAN0,
+        can::BitConfig::new_checked(false, 3, 5, 2, 1).unwrap(),
+        Irq,
+    );
 
     tx.write_all(b"CAN initialized\n").unwrap();
 
     let mut mailbox = can::MailboxConfig::default();
     mailbox.set_mailbox_receiver(0);
+    mailbox.enable_all_interrupts();
     can.configure_mailboxes(mailbox);
 
     can.start();
 
     // Send a test frame
-    let test_frame = Frame::new(
-        Id::Standard(StandardId::new(0x123).unwrap()),
-        &[0x11, 0x22, 0x33, 0x44],
-    )
-    .unwrap();
-    can.send_frame(test_frame).unwrap();
+    // let test_frame = Frame::new(Id::Standard(StandardId::new(0x123).unwrap()), &[0xFF]).unwrap();
+    // can.send_frame(test_frame).unwrap();
+
+    tx.write_all(b"Ready to echo CAN frames\n").unwrap();
 
     loop {
         if let Some(frame) = can.try_receive_frame() {
-            tx.write_fmt(format_args!("Received frame: {:?}\n", frame))
-                .unwrap();
             // Echo the frame back
-            can.send_frame(frame).unwrap();
+            while can.send_frame(frame).is_err() {}
         }
     }
 }

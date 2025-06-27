@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "examples/Cargo.toml"
+    ],
+    "rust-analyzer.cargo.allTargets": false
+}

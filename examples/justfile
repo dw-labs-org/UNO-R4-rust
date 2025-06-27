@@ -1,12 +1,15 @@
-build:    
+build target:    
     rm app.hex || true
     # Extract binary into hex for programmer
-    cargo objcopy  --release -- -O ihex app.hex
+    cargo objcopy --bin {{target}} --release -- -O ihex app.hex
 
-flash: build
+flash target: (build target)
+    # After flashing, the device enters the bootloader mode
     sudo -E env "PATH=$PATH" rfp-cli -device ra -t e2l -if swd -p app.hex -run
+    # This resets and starts the application
+    sudo -E env "PATH=$PATH" rfp-cli -device ra -t e2l -if swd -run
 
-flash_usb: build
+flash_usb target: (build target)
     rfp-cli -device ra -port /dev/ttyACM0 -p app.hex
 
 flash_bl_usb:

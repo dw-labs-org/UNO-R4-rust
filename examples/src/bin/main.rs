@@ -1,11 +1,7 @@
 #![no_std]
 #![no_main]
 
-use core::mem::MaybeUninit;
-
-use ::log::info;
-use embedded_can::{Frame, Id, StandardId};
-use embedded_io::{Read, ReadReady, Write as W};
+use embedded_io::Write as W;
 // pick a panicking behavior
 use panic_halt as _;
 
